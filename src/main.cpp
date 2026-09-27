@@ -1,508 +1,123 @@
 #include <Geode/Geode.hpp>
-#include <Geode/modify/CCHttpClient.hpp>
+#include <Geode/modify/LocalLevelManager.hpp>
+#include <Geode/modify/LevelTools.hpp>
 
 using namespace geode::prelude;
 
 namespace {
-
-    constexpr std::string_view OFFICIAL =
-        "https://www.boomlings.com/database";
-
-    constexpr std::string_view CHERRY =
-        "https://playersbro.ps.fhgdps.com";
-
-    constexpr std::string_view LEVEL_ENDPOINT =
-        "getGJLevels21.php";
-
-    constexpr std::string_view LOGIN_ENDPOINT =
-        "loginGJAccount.php";
-
-
-    // ============================================================
-    // RESPONSE HANDLER
-    // ============================================================
-
-    class CherryResponseHandler : public CCObject {
-    public:
-
-        static CherryResponseHandler* get() {
-            static auto instance = new CherryResponseHandler();
-            return instance;
-        }
-
-        void onResponse(
-            CCHttpClient* sender,
-            CCHttpResponse* response
-        ) {
-
-            if (response == nullptr) {
-                log::error(
-                    "Cherry GDPS: RESPONSE IS NULL"
-                );
-                return;
-            }
-
-
-            auto request = response->getHttpRequest();
-
-            if (request == nullptr) {
-                log::error(
-                    "Cherry GDPS: RESPONSE HAS NO REQUEST"
-                );
-                return;
-            }
-
-
-            auto url = request->getUrl();
-
-            if (url == nullptr) {
-                return;
-            }
-
-
-            std::string_view urlView(url);
-
-
-            // ----------------------------------------------------
-            // DETECT ENDPOINT
-            // ----------------------------------------------------
-
-            bool isLevelsRequest =
-                urlView.find(LEVEL_ENDPOINT)
-                != std::string_view::npos;
-
-            bool isLoginRequest =
-                urlView.find(LOGIN_ENDPOINT)
-                != std::string_view::npos;
-
-
-            // Ignore everything else
-            if (
-                !isLevelsRequest &&
-                !isLoginRequest
-            ) {
-                return;
-            }
-
-
-            log::info(
-                "================================"
-            );
-
-            log::info(
-                "Cherry GDPS: RESPONSE RECEIVED"
-            );
-
-
-            if (isLoginRequest) {
-                log::info(
-                    "TYPE: ACCOUNT LOGIN"
-                );
-            }
-            else if (isLevelsRequest) {
-                log::info(
-                    "TYPE: LEVEL SEARCH"
-                );
-            }
-
-
-            // ----------------------------------------------------
-            // HTTP INFORMATION
-            // ----------------------------------------------------
-
-            log::info(
-                "HTTP CODE: {}",
-                response->getResponseCode()
-            );
-
-            log::info(
-                "SUCCESS: {}",
-                response->isSucceed()
-            );
-
-
-            // ----------------------------------------------------
-            // HTTP ERROR
-            // ----------------------------------------------------
-
-            if (!response->isSucceed()) {
-
-                log::error(
-                    "Cherry GDPS: REQUEST FAILED"
-                );
-
-                log::error(
-                    "ERROR: {}",
-                    response->getErrorBuffer()
-                );
-
-                log::info(
-                    "================================"
-                );
-
-                return;
-            }
-
-
-            // ----------------------------------------------------
-            // RESPONSE DATA
-            // ----------------------------------------------------
-
-            auto data =
-                response->getResponseData();
-
-
-            if (
-                data == nullptr ||
-                data->empty()
-            ) {
-
-                log::error(
-                    "Cherry GDPS: EMPTY RESPONSE"
-                );
-
-                log::info(
-                    "RESULT: EMPTY"
-                );
-
-                log::info(
-                    "================================"
-                );
-
-                return;
-            }
-
-
-            std::string body(
-                data->begin(),
-                data->end()
-            );
-
-
-            log::info(
-                "RESPONSE SIZE: {} bytes",
-                body.size()
-            );
-
-
-            // ====================================================
-            // LOGIN RESPONSE
-            // ====================================================
-
-            if (isLoginRequest) {
-
-                if (body == "-1") {
-
-                    log::error(
-                        "Cherry GDPS: LOGIN REJECTED (-1)"
-                    );
-
-                    log::info(
-                        "RESULT: LOGIN FAILED"
-                    );
-
-                }
-                else {
-
-                    /*
-                     * IMPORTANT:
-                     *
-                     * Do not print the complete login response.
-                     * It can contain account/session information.
-                     */
-
-                    log::info(
-                        "Cherry GDPS: LOGIN RESPONSE RECEIVED"
-                    );
-
-                    log::info(
-                        "RESULT: LOGIN RESPONSE IS NOT -1"
-                    );
-
-                    /*
-                     * Show only a short prefix for diagnosis.
-                     */
-
-                    constexpr size_t MAX_LOGIN_LOG = 80;
-
-                    if (body.size() > MAX_LOGIN_LOG) {
-
-                        log::info(
-                            "RESPONSE PREFIX: {}...",
-                            body.substr(
-                                0,
-                                MAX_LOGIN_LOG
-                            )
-                        );
-
-                    }
-                    else {
-
-                        log::info(
-                            "RESPONSE PREFIX: {}",
-                            body
-                        );
-                    }
-                }
-
-                log::info(
-                    "================================"
-                );
-
-                return;
-            }
-
-
-            // ====================================================
-            // LEVEL RESPONSE
-            // ====================================================
-
-            if (isLevelsRequest) {
-
-                if (body == "-1") {
-
-                    log::error(
-                        "Cherry GDPS: SERVER RETURNED -1"
-                    );
-
-                    log::info(
-                        "RESULT: LEVEL REQUEST FAILED"
-                    );
-
-                }
-
-                else if (
-                    body == "#" ||
-                    body.starts_with("##")
-                ) {
-
-                    log::warn(
-                        "Cherry GDPS: NO LEVEL DATA"
-                    );
-
-                    log::info(
-                        "RESULT: EMPTY / METADATA"
-                    );
-
-                    log::info(
-                        "RESPONSE: {}",
-                        body
-                    );
-                }
-
-                else {
-
-                    log::info(
-                        "Cherry GDPS: RESPONSE CONTAINS DATA"
-                    );
-
-                    log::info(
-                        "RESULT: LEVEL DATA DETECTED"
-                    );
-
-
-                    /*
-                     * Only print the beginning.
-                     * Level responses can be very large.
-                     */
-
-                    constexpr size_t MAX_LEVEL_LOG = 500;
-
-
-                    if (
-                        body.size() >
-                        MAX_LEVEL_LOG
-                    ) {
-
-                        log::info(
-                            "RESPONSE: {}...",
-                            body.substr(
-                                0,
-                                MAX_LEVEL_LOG
-                            )
-                        );
-
-                    }
-                    else {
-
-                        log::info(
-                            "RESPONSE: {}",
-                            body
-                        );
-                    }
-                }
-            }
-
-
-            log::info(
-                "================================"
-            );
-        }
-    };
-
+    constexpr int CUSTOM_MAIN_LEVEL = 1;
+
+    // Datos de prueba
+    constexpr char const* CUSTOM_LEVEL_NAME = "Test Level";
+    constexpr int CUSTOM_STARS = 3;
+    constexpr int CUSTOM_COINS = 3;
+    constexpr GJDifficulty CUSTOM_DIFFICULTY = GJDifficulty::Normal;
 }
 
+// ============================================================
+// REEMPLAZAR STEREO MADNESS
+// ============================================================
 
-// ================================================================
-// MOD LOADED
-// ================================================================
+class $modify(CustomLocalLevelManager, LocalLevelManager) {
+    gd::string getMainLevelString(int id) {
 
-$on_mod(Loaded) {
+        // Solo reemplazamos el nivel principal #1.
+        if (id != CUSTOM_MAIN_LEVEL)
+            return LocalLevelManager::getMainLevelString(id);
 
-    log::info(
-        "================================"
-    );
-
-    log::info(
-        "CHERRY GDPS REDIRECT LOADED"
-    );
-
-    log::info(
-        "================================"
-    );
-}
-
-
-// ================================================================
-// HTTP REDIRECT
-// ================================================================
-
-class $modify(
-    CherryCCHttpClient,
-    CCHttpClient
-) {
-
-    void send(
-        CCHttpRequest* request
-    ) {
-
-        if (request == nullptr) {
-
-            CCHttpClient::send(request);
-
-            return;
-        }
-
-
-        auto url =
-            request->getUrl();
-
-
-        if (url == nullptr) {
-
-            CCHttpClient::send(request);
-
-            return;
-        }
-
-
-        // --------------------------------------------------------
-        // ORIGINAL URL
-        // --------------------------------------------------------
-
-        log::info(
-            "Cherry GDPS: REQUEST: {}",
-            url
+        // Busca:
+        // res/levels/level1.txt
+        auto file = CCString::createWithFormat(
+            "level%i.txt"_spr,
+            id
         );
 
+        if (file == nullptr)
+            return LocalLevelManager::getMainLevelString(id);
 
-        std::string redirected(url);
+        auto content = CCString::createWithContentsOfFile(
+            file->getCString()
+        );
 
+        if (content == nullptr)
+            return LocalLevelManager::getMainLevelString(id);
 
-        // --------------------------------------------------------
-        // BOOMLINGS → CHERRY
-        // --------------------------------------------------------
-
-        if (
-            redirected.starts_with(OFFICIAL)
-        ) {
-
-            redirected.replace(
-                0,
-                OFFICIAL.size(),
-                CHERRY
-            );
-
-
-            // ----------------------------------------------------
-            // PREVENT DOUBLE SLASH
-            // ----------------------------------------------------
-
-            constexpr std::string_view DOUBLE_SLASH =
-                "https://playersbro.ps.fhgdps.com//";
-
-
-            if (
-                redirected.starts_with(
-                    DOUBLE_SLASH
-                )
-            ) {
-
-                redirected.erase(
-                    33,
-                    1
-                );
-            }
-
-
-            request->setUrl(
-                redirected.c_str()
-            );
-
-
-            log::info(
-                "Cherry GDPS: REDIRECTED: {}",
-                redirected
-            );
-        }
-
-
-        // --------------------------------------------------------
-        // RESPONSE CAPTURE
-        // --------------------------------------------------------
-
-        bool isLevelsRequest =
-            redirected.find(
-                "getGJLevels21.php"
-            )
-            != std::string::npos;
-
-
-        bool isLoginRequest =
-            redirected.find(
-                "loginGJAccount.php"
-            )
-            != std::string::npos;
-
-
-        /*
-         * Capture only:
-         *
-         * getGJLevels21.php
-         * loginGJAccount.php
-         *
-         * We leave all other requests alone.
-         */
-
-        if (
-            isLevelsRequest ||
-            isLoginRequest
-        ) {
-
-            request->setResponseCallback(
-                CherryResponseHandler::get(),
-
-                httpresponse_selector(
-                    CherryResponseHandler::onResponse
-                )
-            );
-        }
-
-
-        // --------------------------------------------------------
-        // SEND REQUEST
-        // --------------------------------------------------------
-
-        CCHttpClient::send(request);
+        return gd::string(content->getCString());
     }
 };
+
+// ============================================================
+// DATOS DEL NIVEL
+// ============================================================
+
+class $modify(CustomLevelTools, LevelTools) {
+
+    GJGameLevel* getLevel(int levelID, bool loaded) {
+
+        // Los demás niveles siguen siendo vanilla.
+        if (levelID != CUSTOM_MAIN_LEVEL)
+            return LevelTools::getLevel(levelID, loaded);
+
+        auto level = GJGameLevel::create();
+
+        if (level == nullptr)
+            return nullptr;
+
+        // Nombre
+        level->m_levelName = CUSTOM_LEVEL_NAME;
+
+        // ID de nivel
+        level->m_levelID = CUSTOM_MAIN_LEVEL;
+
+        // Tipo
+        level->m_levelType = GJLevelType::Saved;
+
+        // Música de prueba:
+        // 0 = Stereo Madness
+        level->m_audioTrack = 0;
+
+        // Monedas
+        level->m_coins = CUSTOM_COINS;
+
+        // Estrellas + dificultad
+        setLevelInfo(
+            level,
+            CUSTOM_STARS,
+            CUSTOM_DIFFICULTY,
+            0
+        );
+
+        // Cargar nuestro nivel.
+        if (!loaded) {
+            level->m_levelString =
+                LocalLevelManager::sharedState()
+                    ->getMainLevelString(CUSTOM_MAIN_LEVEL);
+        }
+
+        return level;
+    }
+
+    // Desactivar la comprobación de integridad
+    // únicamente para nuestro nivel.
+    bool verifyLevelIntegrity(
+        gd::string verifyString,
+        int levelID
+    ) {
+        if (levelID == CUSTOM_MAIN_LEVEL)
+            return true;
+
+        return LevelTools::verifyLevelIntegrity(
+            verifyString,
+            levelID
+        );
+    }
+};
+
+// ============================================================
+// MOD CARGADO
+// ============================================================
+
+$on_mod(Loaded) {
+    log::info("Geometry Dash Levels loaded!");
+    log::info("Stereo Madness replaced with Test Level.");
+}
