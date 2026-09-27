@@ -7,7 +7,6 @@ using namespace geode::prelude;
 namespace {
     constexpr int CUSTOM_MAIN_LEVEL = 1;
 
-    // Datos de prueba
     constexpr char const* CUSTOM_LEVEL_NAME = "Test Level";
     constexpr int CUSTOM_STARS = 3;
     constexpr int CUSTOM_COINS = 3;
@@ -15,18 +14,14 @@ namespace {
 }
 
 // ============================================================
-// REEMPLAZAR STEREO MADNESS
+// REEMPLAZAR LA CADENA DE STEREO MADNESS
 // ============================================================
 
 class $modify(CustomLocalLevelManager, LocalLevelManager) {
     gd::string getMainLevelString(int id) {
-
-        // Solo reemplazamos el nivel principal #1.
         if (id != CUSTOM_MAIN_LEVEL)
             return LocalLevelManager::getMainLevelString(id);
 
-        // Busca:
-        // res/levels/level1.txt
         auto file = CCString::createWithFormat(
             "level%i.txt"_spr,
             id
@@ -47,14 +42,13 @@ class $modify(CustomLocalLevelManager, LocalLevelManager) {
 };
 
 // ============================================================
-// DATOS DEL NIVEL
+// REEMPLAZAR LOS DATOS DE STEREO MADNESS
 // ============================================================
 
 class $modify(CustomLevelTools, LevelTools) {
-
     GJGameLevel* getLevel(int levelID, bool loaded) {
 
-        // Los demás niveles siguen siendo vanilla.
+        // Los niveles 2+ siguen siendo vanilla.
         if (levelID != CUSTOM_MAIN_LEVEL)
             return LevelTools::getLevel(levelID, loaded);
 
@@ -66,28 +60,25 @@ class $modify(CustomLevelTools, LevelTools) {
         // Nombre
         level->m_levelName = CUSTOM_LEVEL_NAME;
 
-        // ID de nivel
+        // ID
         level->m_levelID = CUSTOM_MAIN_LEVEL;
 
         // Tipo
         level->m_levelType = GJLevelType::Saved;
 
-        // Música de prueba:
-        // 0 = Stereo Madness
+        // Música de prueba
         level->m_audioTrack = 0;
 
         // Monedas
         level->m_coins = CUSTOM_COINS;
 
-        // Estrellas + dificultad
-        setLevelInfo(
-            level,
-            CUSTOM_STARS,
-            CUSTOM_DIFFICULTY,
-            0
-        );
+        // Estrellas
+        level->m_stars = CUSTOM_STARS;
 
-        // Cargar nuestro nivel.
+        // Dificultad
+        level->m_difficulty = CUSTOM_DIFFICULTY;
+
+        // Cargar nuestra cadena de nivel.
         if (!loaded) {
             level->m_levelString =
                 LocalLevelManager::sharedState()
@@ -97,8 +88,6 @@ class $modify(CustomLevelTools, LevelTools) {
         return level;
     }
 
-    // Desactivar la comprobación de integridad
-    // únicamente para nuestro nivel.
     bool verifyLevelIntegrity(
         gd::string verifyString,
         int levelID
