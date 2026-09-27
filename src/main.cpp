@@ -5,7 +5,7 @@
 using namespace geode::prelude;
 
 namespace {
-    constexpr int CUSTOM_MAIN_LEVEL = 1;
+    constexpr int CUSTOM_LEVEL_ID = 1;
 
     constexpr char const* CUSTOM_LEVEL_NAME = "Test Level";
     constexpr int CUSTOM_STARS = 3;
@@ -13,76 +13,57 @@ namespace {
     constexpr GJDifficulty CUSTOM_DIFFICULTY = GJDifficulty::Normal;
 }
 
-// ============================================================
-// REEMPLAZAR LA CADENA DE STEREO MADNESS
-// ============================================================
-
 class $modify(CustomLocalLevelManager, LocalLevelManager) {
     gd::string getMainLevelString(int id) {
-        if (id != CUSTOM_MAIN_LEVEL)
+        if (id != CUSTOM_LEVEL_ID)
             return LocalLevelManager::getMainLevelString(id);
 
-        auto file = CCString::createWithFormat(
-            "level%i.txt"_spr,
-            id
+        auto path = Mod::get()->getResourcesDir() / "levels" / "level1.txt";
+
+        auto result = utils::file::readString(path);
+
+        if (result.isErr()) {
+            log::error(
+                "Could not read custom level: {}",
+                result.unwrapErr()
+            );
+
+            return "";
+        }
+
+        log::info(
+            "Loaded custom level string: {} characters",
+            result.unwrap().size()
         );
 
-        if (file == nullptr)
-            return LocalLevelManager::getMainLevelString(id);
-
-        auto content = CCString::createWithContentsOfFile(
-            file->getCString()
-        );
-
-        if (content == nullptr)
-            return LocalLevelManager::getMainLevelString(id);
-
-        return gd::string(content->getCString());
+        return result.unwrap();
     }
 };
-
-// ============================================================
-// REEMPLAZAR LOS DATOS DE STEREO MADNESS
-// ============================================================
 
 class $modify(CustomLevelTools, LevelTools) {
     GJGameLevel* getLevel(int levelID, bool loaded) {
 
-        // Los niveles 2+ siguen siendo vanilla.
-        if (levelID != CUSTOM_MAIN_LEVEL)
+        if (levelID != CUSTOM_LEVEL_ID)
             return LevelTools::getLevel(levelID, loaded);
 
         auto level = GJGameLevel::create();
 
-        if (level == nullptr)
+        if (!level)
             return nullptr;
 
-        // Nombre
+        level->m_levelID = CUSTOM_LEVEL_ID;
         level->m_levelName = CUSTOM_LEVEL_NAME;
-
-        // ID
-        level->m_levelID = CUSTOM_MAIN_LEVEL;
-
-        // Tipo
         level->m_levelType = GJLevelType::Saved;
 
-        // Música de prueba
         level->m_audioTrack = 0;
-
-        // Monedas
         level->m_coins = CUSTOM_COINS;
-
-        // Estrellas
         level->m_stars = CUSTOM_STARS;
-
-        // Dificultad
         level->m_difficulty = CUSTOM_DIFFICULTY;
 
-        // Cargar nuestra cadena de nivel.
         if (!loaded) {
             level->m_levelString =
                 LocalLevelManager::sharedState()
-                    ->getMainLevelString(CUSTOM_MAIN_LEVEL);
+                    ->getMainLevelString(CUSTOM_LEVEL_ID);
         }
 
         return level;
@@ -92,7 +73,7 @@ class $modify(CustomLevelTools, LevelTools) {
         gd::string verifyString,
         int levelID
     ) {
-        if (levelID == CUSTOM_MAIN_LEVEL)
+        if (levelID == CUSTOM_LEVEL_ID)
             return true;
 
         return LevelTools::verifyLevelIntegrity(
@@ -102,11 +83,32 @@ class $modify(CustomLevelTools, LevelTools) {
     }
 };
 
-// ============================================================
-// MOD CARGADO
-// ============================================================
-
 $on_mod(Loaded) {
-    log::info("Geometry Dash Levels loaded!");
-    log::info("Stereo Madness replaced with Test Level.");
+    auto path =
+        Mod::get()->getResourcesDir()
+        / "levels"
+        / "level1.txt";
+
+    log::info(
+        "Geometry Dash Levels loaded!"
+    );
+
+    log::info(
+        "Level resource path: {}",
+        path.string()
+    );
+
+    auto test = utils::file::readString(path);
+
+    if (test.isErr()) {
+        log::error(
+            "TEST FAILED: level1.txt cannot be read"
+        );
+    }
+    else {
+        log::info(
+            "TEST OK: level1.txt read successfully ({} chars)",
+            test.unwrap().size()
+        );
+    }
 }
