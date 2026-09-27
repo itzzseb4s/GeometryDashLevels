@@ -3,9 +3,14 @@
     "gd": {
         "android": "2.2081"
     },
-    "id": "cherry.gdps-redirect",
-    "name": "Cherry GDPS",
-    "version": "v1.0.0-beta.1",
-    "developer": "Cherry",
-    "description": "Version test de Cherry GDPS para Geode"
+    "id": "seb4s.geometrydashlevels",
+    "name": "Geometry Dash",
+    "version": "v0.1.0",
+    "developer": "Sebastián",
+    "description": "Replaces main level 1 with a bundled custom level.",
+    "resources": {
+        "files": [
+            "res/levels/*.txt"
+        ]
+    }
 }
